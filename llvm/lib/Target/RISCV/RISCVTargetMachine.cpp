@@ -15,6 +15,7 @@
 #include "RISCV.h"
 #include "RISCVMachineFunctionInfo.h"
 #include "RISCVMacroFusion.h"
+#include "RISCVPreRAScheduler.h"
 #include "RISCVTargetObjectFile.h"
 #include "RISCVTargetTransformInfo.h"
 #include "TargetInfo/RISCVTargetInfo.h"
@@ -41,6 +42,36 @@ static cl::opt<bool> EnableRedundantCopyElimination(
     "riscv-enable-copyelim",
     cl::desc("Enable the redundant copy elimination pass"), cl::init(true),
     cl::Hidden);
+
+static cl::opt<bool> EnableRISCVPreRAScheduler(
+    "riscv-enable-prera-scheduler",
+    cl::desc("Enable RISCV custom Pre-RA scheduler"), cl::init(false),
+    cl::Hidden);
+
+static cl::opt<std::string> RISCVSchedDirection(
+    "riscv-sched-direction",
+    cl::desc("Scheduling direction: topdown, bottomup, or bidirectional"),
+    cl::init("bidirectional"), cl::Hidden);
+
+static cl::opt<unsigned> RISCVSchedRegPressureWeight(
+    "riscv-sched-regpressure-weight",
+    cl::desc("Weight for register pressure in scheduling (0-100)"),
+    cl::init(30), cl::Hidden);
+
+static cl::opt<unsigned> RISCVSchedLatencyWeight(
+    "riscv-sched-latency-weight",
+    cl::desc("Weight for latency in scheduling (0-100)"),
+    cl::init(35), cl::Hidden);
+
+static cl::opt<unsigned> RISCVSchedClusteringWeight(
+    "riscv-sched-clustering-weight",
+    cl::desc("Weight for instruction clustering in scheduling (0-100)"),
+    cl::init(20), cl::Hidden);
+
+static cl::opt<unsigned> RISCVSchedResourceWeight(
+    "riscv-sched-resource-weight",
+    cl::desc("Weight for resource usage in scheduling (0-100)"),
+    cl::init(15), cl::Hidden);
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   RegisterTargetMachine<RISCVTargetMachine> X(getTheRISCV32Target());
@@ -146,11 +177,45 @@ public:
   ScheduleDAGInstrs *
   createMachineScheduler(MachineSchedContext *C) const override {
     const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
+
+    // Use custom RISCV Pre-RA scheduler if enabled
+    if (EnableRISCVPreRAScheduler) {
+      // Configure scheduler based on command line options
+      RISCVPreRASchedConfig Config;
+
+      // Set scheduling direction
+      if (RISCVSchedDirection == "topdown") {
+        Config.Direction = RISCVSchedDirection::TopDown;
+      } else if (RISCVSchedDirection == "bottomup") {
+        Config.Direction = RISCVSchedDirection::BottomUp;
+      } else {
+        Config.Direction = RISCVSchedDirection::Bidirectional;
+      }
+
+      // Set weights
+      Config.RegisterPressureWeight = RISCVSchedRegPressureWeight;
+      Config.LatencyWeight = RISCVSchedLatencyWeight;
+      Config.ClusteringWeight = RISCVSchedClusteringWeight;
+      Config.ResourceWeight = RISCVSchedResourceWeight;
+
+      // Create scheduler with configuration
+      ScheduleDAGMILive *DAG = createRISCVPreRAScheduler(C, Config);
+
+      // Add macro fusion mutation if supported
+      if (ST.hasMacroFusion()) {
+        DAG->addMutation(createRISCVMacroFusionDAGMutation());
+      }
+
+      return DAG;
+    }
+
+    // Fall back to default scheduler with macro fusion if available
     if (ST.hasMacroFusion()) {
       ScheduleDAGMILive *DAG = createGenericSchedLive(C);
       DAG->addMutation(createRISCVMacroFusionDAGMutation());
       return DAG;
     }
+
     return nullptr;
   }
 
