@@ -14,7 +14,6 @@
 #include "MCTargetDesc/RISCVBaseInfo.h"
 #include "RISCV.h"
 #include "RISCVMachineFunctionInfo.h"
-#include "RISCVMacroFusion.h"
 #include "RISCVPreRAScheduler.h"
 #include "RISCVTargetObjectFile.h"
 #include "RISCVTargetTransformInfo.h"
@@ -176,8 +175,6 @@ public:
 
   ScheduleDAGInstrs *
   createMachineScheduler(MachineSchedContext *C) const override {
-    const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
-
     // Use custom RISCV Pre-RA scheduler if enabled
     if (EnableRISCVPreRAScheduler) {
       // Configure scheduler based on command line options
@@ -202,23 +199,13 @@ public:
       return createRISCVPreRAScheduler(C, Config);
     }
 
-    // Fall back to default scheduler
-    if (ST.hasMacroFusion()) {
-      ScheduleDAGMILive *DAG = createGenericSchedLive(C);
-      DAG->addMutation(createRISCVMacroFusionDAGMutation());
-      return DAG;
-    }
+    // Use default scheduler
     return nullptr;
   }
 
   ScheduleDAGInstrs *
   createPostMachineScheduler(MachineSchedContext *C) const override {
-    const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
-    if (ST.hasMacroFusion()) {
-      ScheduleDAGMI *DAG = createGenericSchedPostRA(C);
-      DAG->addMutation(createRISCVMacroFusionDAGMutation());
-      return DAG;
-    }
+    // Use default post-RA scheduler
     return nullptr;
   }
 
