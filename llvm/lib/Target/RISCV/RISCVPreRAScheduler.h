@@ -82,12 +82,6 @@ public:
   /// Called when leaving the current basic block
   void leaveMBB() override;
 
-  /// Called when entering a scheduling region
-  void enterRegion() override;
-
-  /// Called when leaving a scheduling region
-  void leaveRegion() override;
-
   /// Dump the current scheduling policy
   void dumpPolicy() const override;
 

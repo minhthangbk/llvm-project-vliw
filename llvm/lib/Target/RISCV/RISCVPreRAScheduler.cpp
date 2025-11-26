@@ -107,24 +107,18 @@ void RISCVPreRAScheduler::enterMBB(MachineBasicBlock *MBB) {
 
 void RISCVPreRAScheduler::leaveMBB() {
   LLVM_DEBUG(dbgs() << "RISCVPreRAScheduler::leaveMBB\n");
-  GenericScheduler::leaveMBB();
-  CurMBB = nullptr;
-}
 
-void RISCVPreRAScheduler::enterRegion() {
-  LLVM_DEBUG(dbgs() << "RISCVPreRAScheduler::enterRegion\n");
-  GenericScheduler::enterRegion();
-}
-
-void RISCVPreRAScheduler::leaveRegion() {
+  // Print statistics for the basic block
   LLVM_DEBUG({
-    dbgs() << "RISCVPreRAScheduler::leaveRegion - Statistics:\n";
+    dbgs() << "  Statistics for MBB:\n";
     dbgs() << "  Instructions scheduled: " << Stats.NumInstructions << "\n";
     dbgs() << "  Max register pressure: " << Stats.MaxRegPressure << "\n";
     dbgs() << "  Total latency: " << Stats.TotalLatency << "\n";
     dbgs() << "  Resource conflicts: " << Stats.ResourceConflicts << "\n";
   });
-  GenericScheduler::leaveRegion();
+
+  GenericScheduler::leaveMBB();
+  CurMBB = nullptr;
 }
 
 void RISCVPreRAScheduler::dumpPolicy() const {
@@ -279,19 +273,27 @@ int RISCVPreRAScheduler::evaluateClustering(const SchedCandidate &Cand) const {
   int ClusterScore = 0;
 
   // Reward candidates that form clusters with already scheduled instructions
-  const SUnit *NextClusterSU = Cand.AtTop ? DAG->getNextClusterSucc()
-                                          : DAG->getNextClusterPred();
-  if (Cand.SU == NextClusterSU) {
-    ClusterScore += 100; // High reward for continuing a cluster
-  }
-
-  // Check for clustering opportunities based on instruction properties
-  // (e.g., loads/stores to nearby addresses, ALU ops on related registers)
-  // This is simplified; real implementation would analyze instruction operands
-  if (Cand.SU->getInstr()) {
+  // Check if this instruction is part of a cluster
+  if (Cand.SU && Cand.SU->getInstr()) {
     const MachineInstr *MI = Cand.SU->getInstr();
+
+    // Bonus for memory operations which often benefit from clustering
     if (MI->mayLoad() || MI->mayStore()) {
-      ClusterScore += 20; // Slight bonus for memory operations
+      ClusterScore += 30;
+    }
+
+    // Check if instruction has successors/predecessors in same cluster
+    // (simplified heuristic based on dependency chains)
+    int ClusteredDeps = 0;
+    for (const SDep &Pred : Cand.SU->Preds) {
+      if (Pred.getSUnit()->isScheduled) {
+        ClusteredDeps++;
+      }
+    }
+
+    // Reward instructions with recently scheduled dependencies
+    if (ClusteredDeps > 0) {
+      ClusterScore += ClusteredDeps * 10;
     }
   }
 
@@ -301,7 +303,7 @@ int RISCVPreRAScheduler::evaluateClustering(const SchedCandidate &Cand) const {
 
 int RISCVPreRAScheduler::evaluateResource(const SchedCandidate &Cand,
                                           const SchedBoundary *Zone) const {
-  if (!Config.EnableResourceBalance || !Zone)
+  if (!Config.EnableResourceBalance)
     return 0;
 
   int ResourceScore = 0;
@@ -319,11 +321,9 @@ int RISCVPreRAScheduler::evaluateResource(const SchedCandidate &Cand,
     ResourceScore += Cand.ResDelta.DemandedResources * 20;
   }
 
-  // Check for resource stalls
-  if (Zone) {
-    unsigned Stalls = Zone->getLatencyStallCycles(Cand.SU);
-    ResourceScore -= Stalls * 40; // Penalize instructions that will stall
-  }
+  // Note: getLatencyStallCycles is not const, so we cannot call it from
+  // a const method. In a production implementation, you would need to
+  // restructure the code to allow mutable access to the SchedBoundary.
 
   LLVM_DEBUG(dbgs() << "    Resource score: " << ResourceScore << "\n");
   return ResourceScore;

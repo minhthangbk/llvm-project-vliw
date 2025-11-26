@@ -48,7 +48,7 @@ static cl::opt<bool> EnableRISCVPreRAScheduler(
     cl::desc("Enable RISCV custom Pre-RA scheduler"), cl::init(false),
     cl::Hidden);
 
-static cl::opt<std::string> RISCVSchedDirection(
+static cl::opt<std::string> RISCVSchedDirectionName(
     "riscv-sched-direction",
     cl::desc("Scheduling direction: topdown, bottomup, or bidirectional"),
     cl::init("bidirectional"), cl::Hidden);
@@ -184,9 +184,9 @@ public:
       RISCVPreRASchedConfig Config;
 
       // Set scheduling direction
-      if (RISCVSchedDirection == "topdown") {
+      if (RISCVSchedDirectionName == "topdown") {
         Config.Direction = RISCVSchedDirection::TopDown;
-      } else if (RISCVSchedDirection == "bottomup") {
+      } else if (RISCVSchedDirectionName == "bottomup") {
         Config.Direction = RISCVSchedDirection::BottomUp;
       } else {
         Config.Direction = RISCVSchedDirection::Bidirectional;
@@ -199,23 +199,15 @@ public:
       Config.ResourceWeight = RISCVSchedResourceWeight;
 
       // Create scheduler with configuration
-      ScheduleDAGMILive *DAG = createRISCVPreRAScheduler(C, Config);
-
-      // Add macro fusion mutation if supported
-      if (ST.hasMacroFusion()) {
-        DAG->addMutation(createRISCVMacroFusionDAGMutation());
-      }
-
-      return DAG;
+      return createRISCVPreRAScheduler(C, Config);
     }
 
-    // Fall back to default scheduler with macro fusion if available
+    // Fall back to default scheduler
     if (ST.hasMacroFusion()) {
       ScheduleDAGMILive *DAG = createGenericSchedLive(C);
       DAG->addMutation(createRISCVMacroFusionDAGMutation());
       return DAG;
     }
-
     return nullptr;
   }
 
