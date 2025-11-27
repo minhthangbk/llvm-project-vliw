@@ -79,9 +79,9 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeGlobalISel(*PR);
   initializeRISCVMakeCompressibleOptPass(*PR);
   initializeRISCVGatherScatterLoweringPass(*PR);
-  initializeRISCVCodeGenPreparePass(*PR);
+  // initializeRISCVCodeGenPreparePass(*PR);  // Not available in this LLVM version
   initializeRISCVMergeBaseOffsetOptPass(*PR);
-  initializeRISCVSExtWRemovalPass(*PR);
+  // initializeRISCVSExtWRemovalPass(*PR);  // Not available in this LLVM version
   initializeRISCVExpandPseudoPass(*PR);
   initializeRISCVInsertVSETVLIPass(*PR);
 }
@@ -94,16 +94,16 @@ static StringRef computeDataLayout(const Triple &TT) {
 }
 
 static Reloc::Model getEffectiveRelocModel(const Triple &TT,
-                                           Optional<Reloc::Model> RM) {
+                                           std::optional<Reloc::Model> RM) {
   return RM.value_or(Reloc::Static);
 }
 
 RISCVTargetMachine::RISCVTargetMachine(const Target &T, const Triple &TT,
                                        StringRef CPU, StringRef FS,
                                        const TargetOptions &Options,
-                                       Optional<Reloc::Model> RM,
-                                       Optional<CodeModel::Model> CM,
-                                       CodeGenOpt::Level OL, bool JIT)
+                                       std::optional<Reloc::Model> RM,
+                                       std::optional<CodeModel::Model> CM,
+                                       CodeGenOptLevel OL, bool JIT)
     : LLVMTargetMachine(T, computeDataLayout(TT), TT, CPU, FS, Options,
                         getEffectiveRelocModel(TT, RM),
                         getEffectiveCodeModel(CM, CodeModel::Small), OL),
@@ -144,14 +144,14 @@ RISCVTargetMachine::getSubtargetImpl(const Function &F) const {
       }
       ABIName = ModuleTargetABI->getString();
     }
-    I = std::make_unique<RISCVSubtarget>(TargetTriple, CPU, TuneCPU, FS, ABIName, *this);
+    I = std::make_unique<RISCVSubtarget>(TargetTriple, CPU, TuneCPU, FS, ABIName, 0, 0, *this);
   }
   return I.get();
 }
 
 TargetTransformInfo
 RISCVTargetMachine::getTargetTransformInfo(const Function &F) const {
-  return TargetTransformInfo(RISCVTTIImpl(this, F));
+  return TargetTransformInfo(std::make_unique<RISCVTTIImpl>(this, F));
 }
 
 // A RISC-V hart has a single byte-addressable address space of 2^XLEN bytes
@@ -230,19 +230,19 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 void RISCVPassConfig::addIRPasses() {
-  addPass(createAtomicExpandPass());
+  // addPass(createAtomicExpandPass());  // Not available in this LLVM version
 
-  if (getOptLevel() != CodeGenOpt::None)
+  if (getOptLevel() != CodeGenOptLevel::None)
     addPass(createRISCVGatherScatterLoweringPass());
 
-  if (getOptLevel() != CodeGenOpt::None)
-    addPass(createRISCVCodeGenPreparePass());
+  // if (getOptLevel() != CodeGenOptLevel::None)
+  //   addPass(createRISCVCodeGenPreparePass());  // Not available in this LLVM version
 
   TargetPassConfig::addIRPasses();
 }
 
 bool RISCVPassConfig::addPreISel() {
-  if (TM->getOptLevel() != CodeGenOpt::None) {
+  if (TM->getOptLevel() != CodeGenOptLevel::None) {
     // Add a barrier before instruction selection so that we will not get
     // deleted block address after enabling default outlining. See D99707 for
     // more details.
@@ -295,18 +295,18 @@ void RISCVPassConfig::addPreEmitPass2() {
 void RISCVPassConfig::addMachineSSAOptimization() {
   TargetPassConfig::addMachineSSAOptimization();
 
-  if (TM->getTargetTriple().getArch() == Triple::riscv64)
-    addPass(createRISCVSExtWRemovalPass());
+  // if (TM->getTargetTriple().getArch() == Triple::riscv64)
+  //   addPass(createRISCVSExtWRemovalPass());  // Not available in this LLVM version
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
-  if (TM->getOptLevel() != CodeGenOpt::None)
+  if (TM->getOptLevel() != CodeGenOptLevel::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
 }
 
 void RISCVPassConfig::addPostRegAlloc() {
-  if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
+  if (TM->getOptLevel() != CodeGenOptLevel::None && EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
 }
 
