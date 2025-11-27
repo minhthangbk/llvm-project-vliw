@@ -156,7 +156,7 @@ bool RISCVCodeGenPrepare::runOnFunction(Function &F) {
 
   auto &TPC = getAnalysis<TargetPassConfig>();
   auto &TM = TPC.getTM<RISCVTargetMachine>();
-  ST = &TM.getSubtarget<RISCVSubtarget>(F);
+  ST = TM.getSubtargetImpl(F);
 
   DL = &F.getParent()->getDataLayout();
 

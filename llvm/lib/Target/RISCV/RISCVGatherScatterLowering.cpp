@@ -464,7 +464,7 @@ bool RISCVGatherScatterLowering::runOnFunction(Function &F) {
 
   auto &TPC = getAnalysis<TargetPassConfig>();
   auto &TM = TPC.getTM<RISCVTargetMachine>();
-  ST = &TM.getSubtarget<RISCVSubtarget>(F);
+  ST = TM.getSubtargetImpl(F);
   if (!ST->hasVInstructions() || !ST->useRVVForFixedLengthVectors())
     return false;
 

@@ -17,11 +17,12 @@
 #include "RISCVSubtarget.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/Target/CGPassBuilderOption.h"
 #include "llvm/Target/TargetMachine.h"
 #include <optional>
 
 namespace llvm {
-class RISCVTargetMachine : public LLVMTargetMachine {
+class RISCVTargetMachine : public CodeGenTargetMachineImpl {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   mutable StringMap<std::unique_ptr<RISCVSubtarget>> SubtargetMap;
 
